@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 
 import copy
+from functools import reduce
+from gf256 import GF256
 
 
 class AES:
@@ -68,15 +70,32 @@ class AES:
                 [ None, None, None, None ]
             ]
 
+        def __getitem__(self, index):
+            return self.bytes[index]
+
+        def __setitem__(self, key, value):
+            self.bytes[key] = value
+
+        def get_bytes(self):
+            result = bytes()
+            for lst in self.bytes:
+                for ch in lst:
+                    result += bytes([ch])
+            return result
+
+        def __str__(self):
+            result = ''
+            for lst in self.bytes:
+                for ch in lst:
+                    result += chr(ch)
+            return result
+
     def __init__(self, key, iv=None):
         self.Nb = 4
-        self.Nk = key / self.Nb
+        self.Nk = len(key) // self.Nb
         self._calculate_round_num()
         self.exp_key = self._expand_key(key)
-        if iv is not None:
-            self.iv = iv
-        else:
-            self.iv = None
+        self.iv = iv
 
     def _calculate_round_num(self):
         if self.Nk == 4:
@@ -87,6 +106,11 @@ class AES:
             self.Nr = 14
 
     def _expand_key(self, key):
+        """
+        This function is used for key expansion
+        :param key: Key to be expanded
+        :return: Expanded key
+        """
         exp_key = []
         i = 0
         while i < self.Nk:
@@ -96,12 +120,17 @@ class AES:
         while i < (self.Nb * (self.Nr + 1)):
             temp = exp_key[i-1]
             if (i % self.Nk) == 0:
-                temp = self._sub_word(self._rot_word(temp)) ^ AES.Rcon[i / self.Nk]
+                sub_word = self._sub_word(self._rot_word(temp))
+                rcon = AES.Rcon[i // self.Nk]
+                temp = self._xor_lists(sub_word, rcon)
             elif self.Nk > 6 and (i % self.Nk) == 4:
                 temp = self._sub_word(temp)
-            exp_key.append(exp_key[i - self.Nk] ^ temp)
+            exp_key.append(self._xor_lists(exp_key[i - self.Nk], temp))
             i += 1
         return exp_key
+
+    def _xor_lists(self, list0, list1):
+        return [x ^ y for x, y in zip(list0, list1)]
 
     def _sub_word(self, word):
         new_word = []
@@ -115,49 +144,49 @@ class AES:
         return [word[1], word[2], word[3], word[0]]
 
     def _create_state(self, msg):
+        """
+
+        :param msg:
+        :return:
+        """
         state = AES._State()
         row_num = 0
         index = 0
         for ch in msg:
+            if index >= self.Nb:
+                row_num += 1
+                index = 0
             if index < self.Nb:
                 state.bytes[row_num][index] = ch
-            index += 1
+                index += 1
         return state
 
     def encrypt(self, msg):
         state = self._create_state(msg)
         state = self._add_round_key(state, self.exp_key[0])
-        for round in range(20, 1):
+        for round in range(1, self.Nr-1):
             state = self._sub_bytes(state)
             state = self._shift_rows(state)
             state = self._mix_columns(state)
             state = self._add_round_key(state, self.exp_key[round])
-
-            state = self._sub_bytes(state)
+        state = self._sub_bytes(state)
         state = self._shift_rows(state)
         state = self._add_round_key(state, self.exp_key[self.Nr])
-        return state
+        return state.get_bytes()
 
     def decrypt(self, msg):
         state = self._create_state(msg)
-        state = self._add_round_key(state, self.exp_key[self.Nr])
-        for round in range(20, 1):
+        state = self._add_round_key(state, self.exp_key[self.Nb * self.Nr])
+        for round in range(self.Nr, 1):
             state = self._inv_shift_rows(state)
             state = self._inv_sub_bytes(state)
             state = self._add_round_key(state, self.exp_key[round])
             state = self._inv_mix_columns(state)
-
         state = self._inv_shift_rows(state)
         state = self._inv_sub_bytes(state)
         state = self._add_round_key(state, self.exp_key[0])
-        return state
+        return state.get_bytes()
 
-    def _poli_mult(self, *args):
-        result = 1
-        for arg in args:
-            result *= arg
-        result %= 0b100011011
-        return result
 
     def _add_round_key(self, state, round_key):
         new_state = copy.deepcopy(state)
@@ -169,6 +198,7 @@ class AES:
                 column_num += 1
             row_num += 1
         return new_state
+
 
     def _sub_bytes(self, state):
         new_state = copy.deepcopy(state)
@@ -184,6 +214,7 @@ class AES:
             row_num += 1
         return new_state
 
+
     def _inv_sub_bytes(self, state):
         inv_state = copy.deepcopy(state)
         row_num = 0
@@ -198,27 +229,24 @@ class AES:
             row_num += 1
         return inv_state
 
+
     def _shift_rows(self, state):
         new_state = copy.deepcopy(state)
         row_num = 0
         for row in state.bytes:
-            column_num = 0
-            for column in row:
-                new_state[row_num][column_num] = state[row_num][column_num+row_num]
-                column_num += 1
+            new_state[row_num] = state[row_num][row_num:] + state[row_num][:row_num]
             row_num += 1
         return new_state
+
 
     def _inv_shift_rows(self, state):
         new_state = copy.deepcopy(state)
         row_num = 0
         for row in state.bytes:
-            column_num = 0
-            for column in row:
-                new_state[row_num][column_num] = state[row_num][column_num-row_num]
-                column_num += 1
+            new_state[row_num] = state[row_num][:row_num] + state[row_num][row_num:]
             row_num += 1
         return new_state
+
 
     def _mix_columns(self, state):
         new_state = copy.deepcopy(state)
@@ -226,48 +254,61 @@ class AES:
         for row in state.bytes:
             column_num = 0
             for column in row:
-                new_state[0][column_num] = self._poli_mult(2, state[0][column_num]) ^ \
-                                           self._poli_mult(3, state[1][column_num]) ^ \
+                new_state[0][column_num] = int(GF256(2) * GF256(state[0][column_num])) ^ \
+                                           int(GF256(3) * GF256(state[1][column_num])) ^ \
                                            state[2][column_num] ^ \
                                            state[3][column_num]
                 new_state[1][column_num] = state[0][column_num] ^ \
-                                           self._poli_mult(2, state[1][column_num]) ^ \
-                                           self._poli_mult(3, state[2][column_num]) ^ \
+                                           int(GF256(2) * GF256(state[1][column_num])) ^ \
+                                           int(GF256(3) * GF256(state[2][column_num])) ^ \
                                            state[3][column_num]
                 new_state[2][column_num] = state[0][column_num] ^ \
                                            state[1][column_num] ^ \
-                                           self._poli_mult(2, state[2][column_num]) ^ \
-                                           self._poli_mult(3, state[3][column_num])
-                new_state[3][column_num] = self._poli_mult(3, state[0][column_num])
+                                           int(GF256(2) * GF256(state[2][column_num])) ^ \
+                                           int(GF256(3) * GF256(state[3][column_num]))
+                new_state[3][column_num] = int(GF256(3) * GF256(state[0][column_num])) ^ \
                                            state[1][column_num] ^ \
                                            state[2][column_num] ^ \
-                                           self._poli_mult(2, state[3][column_num])
+                                           int(GF256(2) * GF256(state[3][column_num]))
                 column_num += 1
             row_num += 1
         return new_state
 
-    def _inv_mix_columns(self, state: AES._State):
+
+    def _inv_mix_columns(self, state):
         new_state = copy.deepcopy(state)
         row_num = 0
         for row in state.bytes:
             column_num = 0
             for column in row:
-                new_state[0][column_num] = self._poli_mult(0x0e, state[0][column_num]) ^ \
-                                           self._poli_mult(0x0b, state[1][column_num]) ^ \
-                                           self._poli_mult(0x0d, state[2][column_num]) ^ \
-                                           self._poli_mult(0x09, state[3][column_num])
-                new_state[1][column_num] = self._poli_mult(0x09, state[0][column_num]) ^ \
-                                           self._poli_mult(0x0e, state[1][column_num]) ^ \
-                                           self._poli_mult(0x0b, state[2][column_num]) ^ \
-                                           self._poli_mult(0x0d, state[3][column_num])
-                new_state[2][column_num] = self._poli_mult(0x0d, state[0][column_num]) ^ \
-                                           self._poli_mult(0x09, state[1][column_num]) ^ \
-                                           self._poli_mult(0x0e, state[2][column_num]) ^ \
-                                           self._poli_mult(0x0b, state[3][column_num])
-                new_state[3][column_num] = self._poli_mult(0x0b, state[0][column_num]) ^ \
-                                           self._poli_mult(0x0d, state[1][column_num]) ^ \
-                                           self._poli_mult(0x09, state[2][column_num]) ^ \
-                                           self._poli_mult(0x0e, state[3][column_num])
+                new_state[0][column_num] = int(GF256(0x0e) * GF256(state[0][column_num])) ^ \
+                                           int(GF256(0x0b) * GF256(state[1][column_num])) ^ \
+                                           int(GF256(0x0d) * GF256(state[2][column_num])) ^ \
+                                           int(GF256(0x09) * GF256(state[3][column_num]))
+                new_state[1][column_num] = int(GF256(0x09) * GF256(state[0][column_num])) ^ \
+                                           int(GF256(0x0e) * GF256(state[1][column_num])) ^ \
+                                           int(GF256(0x0b) * GF256(state[2][column_num])) ^ \
+                                           int(GF256(0x0d) * GF256(state[3][column_num]))
+                new_state[2][column_num] = int(GF256(0x0d) * GF256(state[0][column_num])) ^ \
+                                           int(GF256(0x09) * GF256(state[1][column_num])) ^ \
+                                           int(GF256(0x0e) * GF256(state[2][column_num])) ^ \
+                                           int(GF256(0x0b) * GF256(state[3][column_num]))
+                new_state[3][column_num] = int(GF256(0x0b) * GF256(state[0][column_num])) ^ \
+                                           int(GF256(0x0d) * GF256(state[1][column_num])) ^ \
+                                           int(GF256(0x09) * GF256(state[2][column_num])) ^ \
+                                           int(GF256(0x0e) * GF256(state[3][column_num]))
                 column_num += 1
             row_num += 1
         return new_state
+
+
+def main():
+    aes = AES(bytes('aaaaaaaaaaaaaaaa', encoding='utf8'))
+    enc_msg = aes.encrypt(bytes('aaaaaaaaaaaaaaaa', encoding='utf8'))
+    print(f'enc_msg is {str(enc_msg)}')
+    # dec_msg = aes.decrypt(enc_msg)
+    # print(f'dec_msg is {dec_msg}')
+
+
+if __name__ == '__main__':
+    main()
