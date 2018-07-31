@@ -185,7 +185,7 @@ class AES:
             state = self._add_round_key(state, self.exp_key[(round*self.Nb):((round+1)*self.Nb)])
         state = self._sub_bytes(state)
         state = self._shift_rows(state)
-        state = self._add_round_key(state, self.exp_key[self.Nr*self.Nb:((self.Nr+1)*self.Nb)])
+        state = self._add_round_key(state, self.exp_key[(self.Nr*self.Nb):((self.Nr+1)*self.Nb)])
         return state.get_bytes()
 
     def decrypt(self, msg):
@@ -195,15 +195,15 @@ class AES:
         :return: _Bytes list
         """
         state = self._create_state(msg)
-        state = self._add_round_key(state, self.exp_key[self.Nb * self.Nr])
-        for round in range(self.Nr, 1):
+        state = self._add_round_key(state, self.exp_key[(self.Nr*self.Nb):((self.Nr+1)*self.Nb)])
+        for round in reversed(range(1, self.Nr)):
             state = self._inv_shift_rows(state)
             state = self._inv_sub_bytes(state)
-            state = self._add_round_key(state, self.exp_key[round])
+            state = self._add_round_key(state, self.exp_key[(round*self.Nb):((round+1)*self.Nb)])
             state = self._inv_mix_columns(state)
         state = self._inv_shift_rows(state)
         state = self._inv_sub_bytes(state)
-        state = self._add_round_key(state, self.exp_key[0])
+        state = self._add_round_key(state, self.exp_key[0:self.Nb])
         return state.get_bytes()
 
     def _add_round_key(self, state, round_key):
@@ -231,7 +231,6 @@ class AES:
             row_num += 1
         return new_state
 
-
     def _inv_sub_bytes(self, state):
         inv_state = copy.deepcopy(state)
         row_num = 0
@@ -246,7 +245,6 @@ class AES:
             row_num += 1
         return inv_state
 
-
     def _shift_rows(self, state):
         new_state = copy.deepcopy(state)
         row_num = 0
@@ -255,15 +253,15 @@ class AES:
             row_num += 1
         return new_state
 
-
     def _inv_shift_rows(self, state):
-        new_state = copy.deepcopy(state)
+        inv_state = copy.deepcopy(state)
         row_num = 0
         for row in state.bytes:
-            new_state[row_num] = state[row_num][:row_num] + state[row_num][row_num:]
+            before = state[row_num][len(state.bytes)-row_num:]
+            after = state[row_num][:len(state.bytes)-row_num]
+            inv_state[row_num] = before + after
             row_num += 1
-        return new_state
-
+        return inv_state
 
     def _mix_columns(self, state):
         new_state = copy.deepcopy(state)
@@ -290,7 +288,6 @@ class AES:
                 column_num += 1
             row_num += 1
         return new_state
-
 
     def _inv_mix_columns(self, state):
         new_state = copy.deepcopy(state)
