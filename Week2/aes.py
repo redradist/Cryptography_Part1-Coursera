@@ -172,9 +172,9 @@ class AES:
 
     def encrypt(self, msg):
         """
-        
-        :param msg: Msg from which created _State
-        :return: _State class
+        Encrypt message
+        :param msg: Msg for encryption
+        :return: Bytes list
         """
         state = self._create_state(msg)
         state = self._add_round_key(state, self.exp_key[0:self.Nb])
@@ -189,6 +189,11 @@ class AES:
         return state.get_bytes()
 
     def decrypt(self, msg):
+        """
+        Decrypt message
+        :param msg: Msg for decryption
+        :return: _Bytes list
+        """
         state = self._create_state(msg)
         state = self._add_round_key(state, self.exp_key[self.Nb * self.Nr])
         for round in range(self.Nr, 1):
@@ -316,9 +321,9 @@ class AES:
 
 def main():
     aes = AES(bytes('aaaaaaaaaaaaaaaa', encoding='ascii'))
-    enc_msg = aes.encrypt(bytes('aaaaaaaaaaaaaaaa', encoding='ascii'))
+    enc_msg = aes.encrypt(bytes('abababababababab', encoding='ascii'))
     print(f'enc_msg is {str(enc_msg)}')
-    '5188C6474B228CBDD242E9125EBE1D53C9056AEAA4571A5B30918E0D9A197B97'
+    print(f"proper_msg is {bytes.fromhex('5188C6474B228CBDD242E9125EBE1D53')}")
     # dec_msg = aes.decrypt(enc_msg)
     # print(f'dec_msg is {dec_msg}')
 
