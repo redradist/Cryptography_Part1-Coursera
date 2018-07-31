@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 import copy
-from functools import reduce
 from gf256 import GF256
 
 
@@ -150,28 +149,28 @@ class AES:
         :return:
         """
         state = AES._State()
-        row_num = 0
+        col_num = 0
         index = 0
         for ch in msg:
             if index >= self.Nb:
-                row_num += 1
+                col_num += 1
                 index = 0
             if index < self.Nb:
-                state.bytes[row_num][index] = ch
+                state.bytes[index][col_num] = ch
                 index += 1
         return state
 
     def encrypt(self, msg):
         state = self._create_state(msg)
-        state = self._add_round_key(state, self.exp_key[0])
+        state = self._add_round_key(state, self.exp_key[0:self.Nb])
         for round in range(1, self.Nr-1):
             state = self._sub_bytes(state)
             state = self._shift_rows(state)
             state = self._mix_columns(state)
-            state = self._add_round_key(state, self.exp_key[round])
+            state = self._add_round_key(state, self.exp_key[(round*self.Nb):((round+1)*self.Nb)])
         state = self._sub_bytes(state)
         state = self._shift_rows(state)
-        state = self._add_round_key(state, self.exp_key[self.Nr])
+        state = self._add_round_key(state, self.exp_key[self.Nr*self.Nb:((self.Nr+1)*self.Nb)])
         return state.get_bytes()
 
     def decrypt(self, msg):
@@ -194,7 +193,7 @@ class AES:
         for row in state.bytes:
             column_num = 0
             for column in row:
-                new_state[row_num][column_num] ^= round_key[column_num]
+                new_state[row_num][column_num] ^= round_key[row_num][column_num]
                 column_num += 1
             row_num += 1
         return new_state
@@ -303,9 +302,10 @@ class AES:
 
 
 def main():
-    aes = AES(bytes('aaaaaaaaaaaaaaaa', encoding='utf8'))
-    enc_msg = aes.encrypt(bytes('aaaaaaaaaaaaaaaa', encoding='utf8'))
+    aes = AES(bytes('aaaaaaaaaaaaaaaa', encoding='ascii'))
+    enc_msg = aes.encrypt(bytes('aaaaaaaaaaaaaaaa', encoding='ascii'))
     print(f'enc_msg is {str(enc_msg)}')
+    '5188C6474B228CBDD242E9125EBE1D53C9056AEAA4571A5B30918E0D9A197B97'
     # dec_msg = aes.decrypt(enc_msg)
     # print(f'dec_msg is {dec_msg}')
 
