@@ -61,6 +61,9 @@ class AES:
     ]
 
     class _State:
+        """
+        Class state is used internaly for AES algorithm
+        """
         def __init__(self):
             self.bytes = [
                 [ None, None, None, None ],
@@ -77,9 +80,16 @@ class AES:
 
         def get_bytes(self):
             result = bytes()
-            for lst in self.bytes:
-                for ch in lst:
-                    result += bytes([ch])
+            num = 0
+            col_num = 0
+            while True:
+                result += bytes([self.bytes[num][col_num]])
+                num += 1
+                if num >= len(self.bytes):
+                    num = 0
+                    col_num += 1
+                if col_num >= len(self.bytes[0]):
+                    break
             return result
 
         def __str__(self):
@@ -144,26 +154,31 @@ class AES:
 
     def _create_state(self, msg):
         """
-
-        :param msg:
-        :return:
+        Create state from msg
+        :param msg: Msg from which created _State
+        :return: _State class
         """
         state = AES._State()
+        row_num = 0
         col_num = 0
-        index = 0
         for ch in msg:
-            if index >= self.Nb:
+            if row_num >= self.Nb:
+                row_num = 0
                 col_num += 1
-                index = 0
-            if index < self.Nb:
-                state.bytes[index][col_num] = ch
-                index += 1
+            if row_num < self.Nb:
+                state.bytes[row_num][col_num] = ch
+                row_num += 1
         return state
 
     def encrypt(self, msg):
+        """
+        
+        :param msg: Msg from which created _State
+        :return: _State class
+        """
         state = self._create_state(msg)
         state = self._add_round_key(state, self.exp_key[0:self.Nb])
-        for round in range(1, self.Nr-1):
+        for round in range(1, self.Nr):
             state = self._sub_bytes(state)
             state = self._shift_rows(state)
             state = self._mix_columns(state)
@@ -186,18 +201,16 @@ class AES:
         state = self._add_round_key(state, self.exp_key[0])
         return state.get_bytes()
 
-
     def _add_round_key(self, state, round_key):
         new_state = copy.deepcopy(state)
         row_num = 0
         for row in state.bytes:
             column_num = 0
             for column in row:
-                new_state[row_num][column_num] ^= round_key[row_num][column_num]
+                new_state[row_num][column_num] ^= round_key[column_num][row_num]
                 column_num += 1
             row_num += 1
         return new_state
-
 
     def _sub_bytes(self, state):
         new_state = copy.deepcopy(state)
