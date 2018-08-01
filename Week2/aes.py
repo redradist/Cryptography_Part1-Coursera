@@ -164,6 +164,23 @@ class AES:
     def _xor_lists(self, list0, list1):
         return [x ^ y for x, y in zip(list0, list1)]
 
+    def _increment_none(self):
+        is_overflow = False
+        new_none = []
+        is_first = True
+        for ch in reversed(self.iv):
+            if is_first:
+                ch += 1
+                is_first = False
+            if is_overflow:
+                ch += 1
+                is_overflow = False
+            new_ch = ch % 256
+            if ch // 256 > 0:
+                is_overflow = True
+            new_none.insert(0, new_ch)
+        self.iv = bytes(new_none)
+
     def _create_state(self, msg):
         """
         Create state from msg
@@ -209,7 +226,19 @@ class AES:
         return b"".join(enc_msg)
 
     def _encrypt_CTR(self, msg):
-        pass
+        enc_msg = []
+        index = 0
+        num_chunks = len(msg) // 16
+        if len(msg) % 16 > 0:
+            num_chunks += 1
+        while index < num_chunks:
+            dec_nonce = self._encrypt_ECB(self.iv)
+            self._increment_none()
+            msg_to_enc = msg[16*index:16*index+16]
+            enc_msg.append(self._xor_lists(dec_nonce, msg_to_enc))
+            index += 1
+        bytess = [bytes(chunk) for chunk in enc_msg]
+        return b"".join(bytess)
 
     def encrypt(self, msg, mode='ECB'):
         """
@@ -253,8 +282,20 @@ class AES:
         bytess = [bytes(chunk) for chunk in dec_msg]
         return b"".join(bytess)
 
-    def _decrypt_CTR(self, msg):
-        pass
+    def _decrypt_CTR(self, cmsg):
+        dec_msg = []
+        index = 0
+        num_chunks = len(cmsg) // 16
+        if len(cmsg) % 16 > 0:
+            num_chunks += 1
+        while index < num_chunks:
+            dec_nonce = self._encrypt_ECB(self.iv)
+            self._increment_none()
+            cmsg_to_dec = cmsg[16*index:16*index+16]
+            dec_msg.append(self._xor_lists(dec_nonce, cmsg_to_dec))
+            index += 1
+        bytess = [bytes(chunk) for chunk in dec_msg]
+        return b"".join(bytess)
 
     def decrypt(self, msg, mode='ECB'):
         """
@@ -394,6 +435,16 @@ def main():
               [0x5b, 0x68, 0x62, 0x9f, 0xeb, 0x86, 0x06, 0xf9, 0xa6, 0x66, 0x76, 0x70, 0xb7, 0x5b, 0x38, 0xa5])
     dec_msg = aes.decrypt(bytes.fromhex('b4832d0f26e1ab7da33249de7d4afc48e713ac646ace36e872ad5fb8a512428a6e21364b0c374df45503473c5242a253'), mode='CBC')
     print(f'example_msg_1 is {dec_msg}')
+
+    aes = AES(bytes.fromhex('36f18357be4dbd77f050515c73fcf9f2'),
+              [0x69, 0xdd, 0xa8, 0x45, 0x5c, 0x7d, 0xd4, 0x25, 0x4b, 0xf3, 0x53, 0xb7, 0x73, 0x30, 0x4e, 0xec])
+    dec_msg = aes.decrypt(bytes.fromhex('0ec7702330098ce7f7520d1cbbb20fc388d1b0adb5054dbd7370849dbf0b88d393f252e764f1f5f7ad97ef79d59ce29f5f51eeca32eabedd9afa9329'), mode='CTR')
+    print(f'example_msg_2 is {dec_msg}')
+
+    aes = AES(bytes.fromhex('36f18357be4dbd77f050515c73fcf9f2'),
+              [0x77, 0x0b, 0x80, 0x25, 0x9e, 0xc3, 0x3b, 0xeb, 0x25, 0x61, 0x35, 0x8a, 0x9f, 0x2d, 0xc6, 0x17])
+    dec_msg = aes.decrypt(bytes.fromhex('e46218c0a53cbeca695ae45faa8952aa0e311bde9d4e01726d3184c34451'), mode='CTR')
+    print(f'example_msg_3 is {dec_msg}')
 
 
 if __name__ == '__main__':
