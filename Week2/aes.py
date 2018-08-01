@@ -62,7 +62,7 @@ class AES:
 
     class _State:
         """
-        Class state is used internaly for AES algorithm
+        Class state is used internally for AES algorithm
         """
         def __init__(self):
             self.bytes = [
@@ -99,12 +99,24 @@ class AES:
                     result += chr(ch)
             return result
 
+    def _is_valid_key_len(self, key_len):
+        return key_len == 16 or key_len == 24 or key_len == 32
+
     def __init__(self, key, iv=None):
+        if not self._is_valid_key_len(len(key)):
+            raise ValueError(f'Key [{len(key)}] is not valid key length')
         self.Nb = 4
         self.Nk = len(key) // self.Nb
         self._calculate_round_num()
         self.exp_key = self._expand_key(key)
-        self.iv = iv
+        if iv is not None:
+            if type(iv) == bytes:
+                self.iv = iv
+            else:
+                self.iv = bytes(iv)
+        else:
+            with open("/dev/urandom", "rb") as urandom_gen:
+                self.iv = urandom_gen.read(16)
 
     def _calculate_round_num(self):
         if self.Nk == 4:
@@ -138,19 +150,19 @@ class AES:
             i += 1
         return exp_key
 
-    def _xor_lists(self, list0, list1):
-        return [x ^ y for x, y in zip(list0, list1)]
-
     def _sub_word(self, word):
-        new_word = []
+        sub_word = []
         for ch in word:
             x = ch // 16
             y = ch % 16
-            new_word.append(AES.Sbox[x][y])
-        return new_word
+            sub_word.append(AES.Sbox[x][y])
+        return sub_word
 
     def _rot_word(self, word):
         return [word[1], word[2], word[3], word[0]]
+
+    def _xor_lists(self, list0, list1):
+        return [x ^ y for x, y in zip(list0, list1)]
 
     def _create_state(self, msg):
         """
@@ -170,30 +182,51 @@ class AES:
                 row_num += 1
         return state
 
-    def encrypt(self, msg):
-        """
-        Encrypt message
-        :param msg: Msg for encryption
-        :return: Bytes list
-        """
+    def _encrypt_ECB(self, msg):
         state = self._create_state(msg)
         state = self._add_round_key(state, self.exp_key[0:self.Nb])
         for round in range(1, self.Nr):
             state = self._sub_bytes(state)
             state = self._shift_rows(state)
             state = self._mix_columns(state)
-            state = self._add_round_key(state, self.exp_key[(round*self.Nb):((round+1)*self.Nb)])
+            state = self._add_round_key(state, self.exp_key[(round * self.Nb):((round + 1) * self.Nb)])
         state = self._sub_bytes(state)
         state = self._shift_rows(state)
-        state = self._add_round_key(state, self.exp_key[(self.Nr*self.Nb):((self.Nr+1)*self.Nb)])
+        state = self._add_round_key(state, self.exp_key[(self.Nr * self.Nb):((self.Nr + 1) * self.Nb)])
         return state.get_bytes()
 
-    def decrypt(self, msg):
+    def _encrypt_CBC(self, msg):
+        enc_msg = []
+        index = 0
+        xor_list = self.iv
+        num_chunks = len(msg) // 16
+        while index < num_chunks:
+            msg_to_enc = msg[16*index:16*index+16]
+            msg_to_enc = self._xor_lists(xor_list, msg_to_enc)
+            xor_list = self._encrypt_ECB(msg_to_enc)
+            enc_msg.append(xor_list)
+            index += 1
+        return b"".join(enc_msg)
+
+    def _encrypt_CTR(self, msg):
+        pass
+
+    def encrypt(self, msg, mode='ECB'):
         """
-        Decrypt message
-        :param msg: Msg for decryption
-        :return: _Bytes list
+        Encrypt message
+        :param msg: Msg for encryption
+        :return: Bytes list
         """
+        if mode is None or mode == 'ECB':
+            return self._encrypt_ECB(msg)
+        elif mode == 'CBC':
+            return self._encrypt_CBC(msg)
+        elif mode == 'CTR':
+            return self._encrypt_CTR(msg)
+        else:
+            raise NotImplementedError(f'mode [{mode}] is not implemented !!')
+
+    def _decrypt_ECB(self, msg):
         state = self._create_state(msg)
         state = self._add_round_key(state, self.exp_key[(self.Nr*self.Nb):((self.Nr+1)*self.Nb)])
         for round in reversed(range(1, self.Nr)):
@@ -205,6 +238,38 @@ class AES:
         state = self._inv_sub_bytes(state)
         state = self._add_round_key(state, self.exp_key[0:self.Nb])
         return state.get_bytes()
+
+    def _decrypt_CBC(self, cmsg):
+        dec_msg = []
+        index = 0
+        xor_list = self.iv
+        num_chunks = len(cmsg) // 16
+        while index < num_chunks:
+            cmsg_chunk = cmsg[16*index:16*index+16]
+            dec_msg_chunk = self._xor_lists(xor_list, self._decrypt_ECB(cmsg_chunk))
+            dec_msg.append(dec_msg_chunk)
+            xor_list = cmsg_chunk
+            index += 1
+        bytess = [bytes(chunk) for chunk in dec_msg]
+        return b"".join(bytess)
+
+    def _decrypt_CTR(self, msg):
+        pass
+
+    def decrypt(self, msg, mode='ECB'):
+        """
+        Decrypt message
+        :param msg: Msg for decryption
+        :return: Bytes list
+        """
+        if mode is None or mode == 'ECB':
+            return self._decrypt_ECB(msg)
+        elif mode == 'CBC':
+            return self._decrypt_CBC(msg)
+        elif mode == 'CTR':
+            return self._decrypt_CTR(msg)
+        else:
+            raise NotImplementedError(f'mode [{mode}] is not implemented !!')
 
     def _add_round_key(self, state, round_key):
         new_state = copy.deepcopy(state)
@@ -290,39 +355,36 @@ class AES:
         return new_state
 
     def _inv_mix_columns(self, state):
-        new_state = copy.deepcopy(state)
+        inv_state = copy.deepcopy(state)
         row_num = 0
         for row in state.bytes:
             column_num = 0
             for column in row:
-                new_state[0][column_num] = int(GF256(0x0e) * GF256(state[0][column_num])) ^ \
+                inv_state[0][column_num] = int(GF256(0x0e) * GF256(state[0][column_num])) ^ \
                                            int(GF256(0x0b) * GF256(state[1][column_num])) ^ \
                                            int(GF256(0x0d) * GF256(state[2][column_num])) ^ \
                                            int(GF256(0x09) * GF256(state[3][column_num]))
-                new_state[1][column_num] = int(GF256(0x09) * GF256(state[0][column_num])) ^ \
+                inv_state[1][column_num] = int(GF256(0x09) * GF256(state[0][column_num])) ^ \
                                            int(GF256(0x0e) * GF256(state[1][column_num])) ^ \
                                            int(GF256(0x0b) * GF256(state[2][column_num])) ^ \
                                            int(GF256(0x0d) * GF256(state[3][column_num]))
-                new_state[2][column_num] = int(GF256(0x0d) * GF256(state[0][column_num])) ^ \
+                inv_state[2][column_num] = int(GF256(0x0d) * GF256(state[0][column_num])) ^ \
                                            int(GF256(0x09) * GF256(state[1][column_num])) ^ \
                                            int(GF256(0x0e) * GF256(state[2][column_num])) ^ \
                                            int(GF256(0x0b) * GF256(state[3][column_num]))
-                new_state[3][column_num] = int(GF256(0x0b) * GF256(state[0][column_num])) ^ \
+                inv_state[3][column_num] = int(GF256(0x0b) * GF256(state[0][column_num])) ^ \
                                            int(GF256(0x0d) * GF256(state[1][column_num])) ^ \
                                            int(GF256(0x09) * GF256(state[2][column_num])) ^ \
                                            int(GF256(0x0e) * GF256(state[3][column_num]))
                 column_num += 1
             row_num += 1
-        return new_state
+        return inv_state
 
 
 def main():
-    aes = AES(bytes('aaaaaaaaaaaaaaaa', encoding='ascii'))
-    enc_msg = aes.encrypt(bytes('abababababababab', encoding='ascii'))
-    print(f'enc_msg is {str(enc_msg)}')
-    print(f"proper_msg is {bytes.fromhex('5188C6474B228CBDD242E9125EBE1D53')}")
-    # dec_msg = aes.decrypt(enc_msg)
-    # print(f'dec_msg is {dec_msg}')
+    aes = AES(bytes.fromhex('140b41b22a29beb4061bda66b6747e14'))
+    dec_msg = aes.decrypt(bytes.fromhex('4ca00ff4c898d61e1edbf1800618fb2828a226d160dad07883d04e008a7897ee2e4b7465d5290d0c0e6c6822236e1daafb94ffe0c5da05d9476be028ad7c1d81'))
+    print(f'dec_msg is {dec_msg}')
 
 
 if __name__ == '__main__':
