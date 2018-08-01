@@ -382,9 +382,18 @@ class AES:
 
 
 def main():
-    aes = AES(bytes.fromhex('140b41b22a29beb4061bda66b6747e14'))
-    dec_msg = aes.decrypt(bytes.fromhex('4ca00ff4c898d61e1edbf1800618fb2828a226d160dad07883d04e008a7897ee2e4b7465d5290d0c0e6c6822236e1daafb94ffe0c5da05d9476be028ad7c1d81'))
-    print(f'dec_msg is {dec_msg}')
+    '''
+    Examples from Cryptography, Part 1 (Coursera)
+    '''
+    aes = AES(bytes.fromhex('140b41b22a29beb4061bda66b6747e14'),
+              [0x4c, 0xa0, 0x0f, 0xf4, 0xc8, 0x98, 0xd6, 0x1e, 0x1e, 0xdb, 0xf1, 0x80, 0x06, 0x18, 0xfb, 0x28])
+    dec_msg = aes.decrypt(bytes.fromhex('28a226d160dad07883d04e008a7897ee2e4b7465d5290d0c0e6c6822236e1daafb94ffe0c5da05d9476be028ad7c1d81'), mode='CBC')
+    print(f'example_msg_0 is {dec_msg}')
+
+    aes = AES(bytes.fromhex('140b41b22a29beb4061bda66b6747e14'),
+              [0x5b, 0x68, 0x62, 0x9f, 0xeb, 0x86, 0x06, 0xf9, 0xa6, 0x66, 0x76, 0x70, 0xb7, 0x5b, 0x38, 0xa5])
+    dec_msg = aes.decrypt(bytes.fromhex('b4832d0f26e1ab7da33249de7d4afc48e713ac646ace36e872ad5fb8a512428a6e21364b0c374df45503473c5242a253'), mode='CBC')
+    print(f'example_msg_1 is {dec_msg}')
 
 
 if __name__ == '__main__':
