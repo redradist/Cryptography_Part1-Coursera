@@ -51,3 +51,8 @@ class TestingAES(unittest.TestCase):
         aes = AES(bytes('aaaaaaaaaaaaaaaa', encoding='ascii'))
         dec_msg = aes.decrypt(bytes.fromhex('B72BE667BFB231E45800E956B97C2FAE'))
         self.assertEqual(dec_msg, bytes('abcdefghijklmnop', encoding='ascii'))
+
+    def test__AES192_Encrypt_PeriodicA__Valid(self):
+        aes = AES(bytes('aaaaaaaaaaaaaaaaaaaaaaaa', encoding='ascii'))
+        enc_msg = aes.encrypt(bytes('aaaaaaaaaaaaaaaaaaaaaaaa', encoding='ascii'))
+        self.assertEqual(enc_msg, bytes.fromhex('B60700284ECBA59FA24962D00CF9C2'))
