@@ -424,7 +424,8 @@ class AES:
 
 def main():
     '''
-    Examples from Cryptography, Part 1 (Coursera)
+    Cryptography, Part 1 (Coursera)
+    Week2: Examples
     '''
     aes = AES(bytes.fromhex('140b41b22a29beb4061bda66b6747e14'),
               [0x4c, 0xa0, 0x0f, 0xf4, 0xc8, 0x98, 0xd6, 0x1e, 0x1e, 0xdb, 0xf1, 0x80, 0x06, 0x18, 0xfb, 0x28])
